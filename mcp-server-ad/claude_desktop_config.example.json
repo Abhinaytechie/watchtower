@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "anomaly-detection": {
+      "command": "python",
+      "args": [
+        "C:/Dev/Watchtower/mcp-server-ad/server.py"
+      ],
+      "env": {}
+    }
+  }
+}
+
