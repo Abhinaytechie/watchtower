@@ -13,11 +13,8 @@ import json
 # Initialize FastMCP Server
 # ==========================
 # IMPORTANT: Must be top-level for FastMCP Cloud
-mcp = FastMCP(
-    name="anomaly-detection",
-    version="1.0.0",
-    description="Statistical anomaly detection for time-series data"
-)
+mcp = FastMCP("anomaly-detection")
+
 
 
 # ==========================
