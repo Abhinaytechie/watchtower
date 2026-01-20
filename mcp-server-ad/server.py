@@ -29,7 +29,7 @@ mcp = FastMCP("anomaly-detection")
 # ==========================
 # Database Configuration
 # ==========================
-# ⚠️ Replace with your actual credentials or env vars
+
 DATABASE_URL = (
     f"postgresql://postgres.bkyhgraqxvxzboevblil:{DB_PASS}@aws-1-ap-south-1.pooler.supabase.com:6543/postgres"
 )
@@ -66,6 +66,25 @@ class DetectAnomaliesInput(BaseModel):
 # ==========================
 # Anomaly Detection Methods
 # ==========================
+def get_top_anomalies(
+    df: pd.DataFrame,
+    flag_col: str,
+    score_col: str,
+    limit: int = 5
+) -> List[Dict[str, Any]]:
+    """
+    Return top N anomalies sorted by anomaly score.
+    """
+    if score_col not in df.columns:
+        return []
+
+    return (
+        df[df[flag_col]]
+        .sort_values(score_col, ascending=False)
+        .head(limit)
+        .to_dict("records")
+    )
+
 
 def detect_anomalies_moving_average(
     df: pd.DataFrame,
@@ -174,7 +193,12 @@ def detect_anomalies_core(
             results["moving_average"] = {
                 "total_anomalies": int(df["is_anomaly_ma"].sum()),
                 "anomaly_rate": float(df["is_anomaly_ma"].mean()),
-                "anomalies": df[df["is_anomaly_ma"]].to_dict("records")
+                "top_anomalies": get_top_anomalies(
+                    df,
+                    flag_col="is_anomaly_ma",
+                    score_col="anomaly_score_ma",
+                    limit=5
+                )
             }
 
         if "standard_deviation" in methods:
@@ -182,7 +206,12 @@ def detect_anomalies_core(
             results["standard_deviation"] = {
                 "total_anomalies": int(df["is_anomaly_std"].sum()),
                 "anomaly_rate": float(df["is_anomaly_std"].mean()),
-                "anomalies": df[df["is_anomaly_std"]].to_dict("records")
+                "top_anomalies": get_top_anomalies(
+                    df,
+                    flag_col="is_anomaly_std",
+                    score_col="anomaly_score_std",
+                    limit=5
+                )
             }
 
         if "iqr" in methods:
@@ -190,7 +219,12 @@ def detect_anomalies_core(
             results["iqr"] = {
                 "total_anomalies": int(df["is_anomaly_iqr"].sum()),
                 "anomaly_rate": float(df["is_anomaly_iqr"].mean()),
-                "anomalies": df[df["is_anomaly_iqr"]].to_dict("records")
+                "top_anomalies": get_top_anomalies(
+                        df,
+                        flag_col="is_anomaly_iqr",
+                        score_col="anomaly_score_iqr",
+                        limit=5
+                    )
             }
 
         return {
