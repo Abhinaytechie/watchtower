@@ -1,21 +1,49 @@
 """
 MCP Server for Anomaly Detection using Statistical Methods
-Uses FastMCP framework to detect anomalies in time series data.
+Reads data directly from a PostgreSQL table (e.g., 'tempt').
+
+Compatible with:
+- n8n Agents
+- MCP tool calls
+- Voice (Vapi)
 """
 
 from fastmcp import FastMCP
 import pandas as pd
 import numpy as np
 from typing import Any, Dict, List, Optional
-import json
-
+from sqlalchemy import create_engine
+from pydantic import BaseModel, ConfigDict
+from dotenv import load_dotenv
+import os
+load_dotenv()
+DB_PASS=os.getenv("DB_PASS")
+if not DB_PASS:
+    raise RuntimeError("DB_PASS environment variable is not set")
 # ==========================
 # Initialize FastMCP Server
 # ==========================
-# IMPORTANT: Must be top-level for FastMCP Cloud
 mcp = FastMCP("anomaly-detection")
 
+# ==========================
+# Database Configuration
+# ==========================
+# ⚠️ Replace with your actual credentials or env vars
+DATABASE_URL = f"postgresql://postgres:{DB_PASS}@db.bkyhgraqxvxzboevblil.supabase.co:5432/postgres"
+engine = create_engine(DATABASE_URL)
 
+# ==========================
+# Pydantic Input Model
+# ==========================
+class DetectAnomaliesInput(BaseModel):
+    table: str
+    time_column: str
+    value_column: Optional[str] = None
+    aggregation_level: Optional[str] = None
+    methods: List[str] = ["moving_average", "standard_deviation"]
+
+    # ✅ Ignore n8n / MCP extra metadata safely
+    model_config = ConfigDict(extra="ignore")
 
 # ==========================
 # Anomaly Detection Methods
@@ -86,44 +114,32 @@ def detect_anomalies_iqr(
 
     return df
 
-
 # ==========================
-# Core Processing Function
+# Core Processing Logic
 # ==========================
 
 def detect_anomalies_core(
-    data: str,
+    table: str,
     time_column: str,
-    aggregation_level: Optional[str],
     value_column: Optional[str],
-    methods: List[str],
-    window: int = 7,
-    threshold: float = 2.0,
-    iqr_multiplier: float = 1.5
+    aggregation_level: Optional[str],
+    methods: List[str]
 ) -> Dict[str, Any]:
+
     try:
-        # ✅ FIXED: Expect JSON list of records
-        records = json.loads(data)
-        df = pd.DataFrame(records)
+        # 🔹 Load data from DB
+        query = f'SELECT * FROM "{table}"'
+        df = pd.read_sql(query, engine)
+
+        if df.empty:
+            return {"error": f"Table '{table}' is empty"}
 
         if time_column not in df.columns:
             return {"error": f"Missing time column: {time_column}"}
 
         df[time_column] = pd.to_datetime(df[time_column], errors="coerce")
 
-        # Optional aggregation
-        if aggregation_level and aggregation_level in df.columns:
-            numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-            agg_dict = {col: "sum" for col in numeric_cols if col != aggregation_level}
-            agg_dict[time_column] = "first"
-
-            df = (
-                df.groupby([aggregation_level, time_column])
-                .agg(agg_dict)
-                .reset_index()
-            )
-
-        # Auto-detect value column
+        # 🔹 Auto-detect numeric column if not provided
         if value_column is None:
             numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
             if not numeric_cols:
@@ -136,7 +152,7 @@ def detect_anomalies_core(
         results = {}
 
         if "moving_average" in methods:
-            df = detect_anomalies_moving_average(df, value_column, time_column, window, threshold)
+            df = detect_anomalies_moving_average(df, value_column, time_column)
             results["moving_average"] = {
                 "total_anomalies": int(df["is_anomaly_ma"].sum()),
                 "anomaly_rate": float(df["is_anomaly_ma"].mean()),
@@ -144,7 +160,7 @@ def detect_anomalies_core(
             }
 
         if "standard_deviation" in methods:
-            df = detect_anomalies_standard_deviation(df, value_column, time_column, threshold)
+            df = detect_anomalies_standard_deviation(df, value_column, time_column)
             results["standard_deviation"] = {
                 "total_anomalies": int(df["is_anomaly_std"].sum()),
                 "anomaly_rate": float(df["is_anomaly_std"].mean()),
@@ -152,7 +168,7 @@ def detect_anomalies_core(
             }
 
         if "iqr" in methods:
-            df = detect_anomalies_iqr(df, value_column, time_column, iqr_multiplier)
+            df = detect_anomalies_iqr(df, value_column, time_column)
             results["iqr"] = {
                 "total_anomalies": int(df["is_anomaly_iqr"].sum()),
                 "anomaly_rate": float(df["is_anomaly_iqr"].mean()),
@@ -160,37 +176,37 @@ def detect_anomalies_core(
             }
 
         return {
-            "total_records": len(df),
+            "table": table,
             "time_column": time_column,
             "value_column": value_column,
-            "aggregation_level": aggregation_level,
             "methods_applied": methods,
+            "total_records": len(df),
             "results": results
         }
 
     except Exception as e:
         return {"error": str(e)}
 
-
 # ==========================
-# MCP Tool
+# MCP Tool Definition
 # ==========================
 
 @mcp.tool()
 def detect_anomalies(
-    data: str,
+    table: str,
     time_column: str,
-    aggregation_level: Optional[str] = None,
     value_column: Optional[str] = None,
+    aggregation_level: Optional[str] = None,
     methods: List[str] = ["moving_average", "standard_deviation"]
 ) -> Dict[str, Any]:
     """
-    Detect anomalies in time series data using statistical methods.
+    Detect anomalies in a PostgreSQL table using statistical methods.
+    The table is expected to be prepared beforehand (e.g., 'tempt').
     """
     return detect_anomalies_core(
-        data=data,
+        table=table,
         time_column=time_column,
-        aggregation_level=aggregation_level,
         value_column=value_column,
+        aggregation_level=aggregation_level,
         methods=methods
     )
