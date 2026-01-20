@@ -12,7 +12,7 @@ from fastmcp import FastMCP
 import pandas as pd
 import numpy as np
 from typing import Any, Dict, List, Optional
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from pydantic import BaseModel, ConfigDict
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
@@ -33,13 +33,23 @@ mcp = FastMCP("anomaly-detection")
 DATABASE_URL = (
     f"postgresql+psycopg://postgres:{DB_PASS}"
     "@db.bkyhgraqxvxzboevblil.supabase.co:5432/postgres"
+    "?sslmode=require"
 )
-engine = create_engine(DATABASE_URL)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_size=1,
+    max_overflow=0,
+    pool_timeout=30,
+)
+
 try:
-    with engine.connect() as connection:
-        print("Connection successful!")
+   with engine.connect() as conn:
+    result = conn.execute(text("SELECT 1"))
+    print(result.scalar())
 except Exception as e:
     print(f"Failed to connect: {e}")
+    
 
 # ==========================
 # Pydantic Input Model
