@@ -29,7 +29,10 @@ mcp = FastMCP("anomaly-detection")
 # Database Configuration
 # ==========================
 # ⚠️ Replace with your actual credentials or env vars
-DATABASE_URL = f"postgresql://postgres:{DB_PASS}@db.bkyhgraqxvxzboevblil.supabase.co:5432/postgres"
+DATABASE_URL = (
+    f"postgresql+psycopg://postgres:{DB_PASS}"
+    "@db.bkyhgraqxvxzboevblil.supabase.co:5432/postgres"
+)
 engine = create_engine(DATABASE_URL)
 
 # ==========================
