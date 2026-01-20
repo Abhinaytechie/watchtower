@@ -15,9 +15,10 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import create_engine
 from pydantic import BaseModel, ConfigDict
 from dotenv import load_dotenv
+from urllib.parse import quote_plus
 import os
 load_dotenv()
-DB_PASS=os.getenv("DB_PASS")
+DB_PASS=quote_plus(os.getenv("DB_PASS"))
 if not DB_PASS:
     raise RuntimeError("DB_PASS environment variable is not set")
 # ==========================
@@ -34,6 +35,11 @@ DATABASE_URL = (
     "@db.bkyhgraqxvxzboevblil.supabase.co:5432/postgres"
 )
 engine = create_engine(DATABASE_URL)
+try:
+    with engine.connect() as connection:
+        print("Connection successful!")
+except Exception as e:
+    print(f"Failed to connect: {e}")
 
 # ==========================
 # Pydantic Input Model
