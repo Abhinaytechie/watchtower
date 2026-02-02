@@ -54,6 +54,7 @@ except Exception as e:
 # Pydantic Input Model
 # ==========================
 class DetectAnomaliesInput(BaseModel):
+    toolCallId: Optional[str]=None
     id: Optional[str]=None,
     table: str
     time_column: str
