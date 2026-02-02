@@ -22,6 +22,10 @@ from urllib.parse import quote_plus
 import os
 
 load_dotenv()
+print("Running in FastMCP Cloud")
+print("DB_PASS present:", bool(os.getenv("DB_PASS")))
+print("DB_PASS length:", len(os.getenv("DB_PASS") or ""))
+
 DB_PASS = quote_plus(os.getenv("DB_PASS"))
 if not DB_PASS:
     raise RuntimeError("DB_PASS environment variable is not set")
