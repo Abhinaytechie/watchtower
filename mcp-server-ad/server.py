@@ -13,14 +13,16 @@ import pandas as pd
 import numpy as np
 from typing import Any, Dict, List, Optional
 from sqlalchemy import create_engine, text
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
 import os
+
 load_dotenv()
-DB_PASS=quote_plus(os.getenv("DB_PASS"))
+DB_PASS = quote_plus(os.getenv("DB_PASS"))
 if not DB_PASS:
     raise RuntimeError("DB_PASS environment variable is not set")
+
 # ==========================
 # Initialize FastMCP Server
 # ==========================
@@ -43,24 +45,28 @@ engine = create_engine(
 )
 
 try:
-   with engine.connect() as conn:
-    result = conn.execute(text("SELECT 1"))
-    print(result.scalar())
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT 1"))
+        print(result.scalar())
 except Exception as e:
     print(f"Failed to connect: {e}")
-    
 
 # ==========================
 # Pydantic Input Model
 # ==========================
 class DetectAnomaliesInput(BaseModel):
-    toolCallId: Optional[str]=None
-    id: Optional[str]=None,
-    table: str
-    time_column: str
-    value_column: Optional[str] = None
-    aggregation_level: Optional[str] = None
-    methods: List[str] = ["moving_average", "standard_deviation"]
+    """
+    Input schema for anomaly detection.
+    Ignores any extra fields like toolCallId, id, etc.
+    """
+    table: str = Field(..., description="Database table name (e.g., 'tempt')")
+    time_column: str = Field(..., description="Column containing date/time values")
+    value_column: Optional[str] = Field(None, description="Numeric column to analyze (auto-detected if not provided)")
+    aggregation_level: Optional[str] = Field(None, description="Aggregation level (e.g., 'daily', 'weekly')")
+    methods: List[str] = Field(
+        default=["moving_average", "standard_deviation"],
+        description="Detection methods to apply"
+    )
 
     # ✅ Ignore n8n / MCP extra metadata safely
     model_config = ConfigDict(extra="ignore")
@@ -222,11 +228,11 @@ def detect_anomalies_core(
                 "total_anomalies": int(df["is_anomaly_iqr"].sum()),
                 "anomaly_rate": float(df["is_anomaly_iqr"].mean()),
                 "top_anomalies": get_top_anomalies(
-                        df,
-                        flag_col="is_anomaly_iqr",
-                        score_col="anomaly_score_iqr",
-                        limit=5
-                    )
+                    df,
+                    flag_col="is_anomaly_iqr",
+                    score_col="anomaly_score_iqr",
+                    limit=5
+                )
             }
 
         return {
@@ -247,19 +253,32 @@ def detect_anomalies_core(
 
 @mcp.tool()
 def detect_anomalies(
-   
     table: str,
     time_column: str,
     value_column: Optional[str] = None,
     aggregation_level: Optional[str] = None,
-    methods: List[str] = ["moving_average", "standard_deviation"]
+    methods: List[str] = ["moving_average", "standard_deviation"],
+    **kwargs  # ✅ Catch and ignore any extra parameters like toolCallId, id, etc.
 ) -> Dict[str, Any]:
     """
     Detect anomalies in a PostgreSQL table using statistical methods.
     The table is expected to be prepared beforehand (e.g., 'tempt').
+    
+    Args:
+        table: Database table name (e.g., 'tempt')
+        time_column: Column containing date/time values
+        value_column: Numeric column to analyze (auto-detected if not provided)
+        aggregation_level: Aggregation level (e.g., 'daily', 'weekly')
+        methods: Detection methods to apply (default: ["moving_average", "standard_deviation"])
+    
+    Returns:
+        Dictionary containing anomaly detection results
     """
+    # Log ignored parameters for debugging
+    if kwargs:
+        print(f"⚠️ Ignoring extra parameters: {list(kwargs.keys())}")
+    
     return detect_anomalies_core(
-        
         table=table,
         time_column=time_column,
         value_column=value_column,
