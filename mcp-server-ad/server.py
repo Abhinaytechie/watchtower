@@ -36,7 +36,7 @@ mcp = FastMCP("anomaly-detection")
 # ==========================
 
 DATABASE_URL = (
-    f"postgresql://postgres.bkyhgraqxvxzboevblil:{DB_PASS}@aws-1-ap-south-1.pooler.supabase.com:6543/postgres"
+    f"postgresql://postgres.wnsklpysaozfpjeobrkj:{DB_PASS}@aws-1-ap-south-1.pooler.supabase.com:6543/postgres"
 )
 
 engine = create_engine(
