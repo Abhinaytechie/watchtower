@@ -7,8 +7,7 @@ Compatible with:
 - MCP tool calls
 - Voice (Vapi)
 
-IMPORTANT: FastMCP doesn't support **kwargs, so we explicitly define
-optional parameters that n8n might pass as metadata.
+FIX: Proper JSON serialization for numpy types
 """
 
 from fastmcp import FastMCP
@@ -20,12 +19,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
 import os
+import json
 
 load_dotenv()
-print("Running in FastMCP Cloud")
-print("DB_PASS present:", bool(os.getenv("DB_PASS")))
-print("DB_PASS length:", len(os.getenv("DB_PASS") or ""))
-
 DB_PASS = quote_plus(os.getenv("DB_PASS"))
 if not DB_PASS:
     raise RuntimeError("DB_PASS environment variable is not set")
@@ -59,8 +55,33 @@ except Exception as e:
     print(f"❌ Failed to connect: {e}")
 
 # ==========================
+# JSON Serialization Helper
+# ==========================
+
+def convert_to_json_serializable(obj: Any) -> Any:
+    """
+    Convert numpy types and pandas objects to JSON-serializable Python types.
+    """
+    if isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, pd.Timestamp):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {k: convert_to_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_json_serializable(item) for item in obj]
+    elif pd.isna(obj):
+        return None
+    return obj
+
+# ==========================
 # Anomaly Detection Methods
 # ==========================
+
 def get_top_anomalies(
     df: pd.DataFrame,
     flag_col: str,
@@ -69,16 +90,20 @@ def get_top_anomalies(
 ) -> List[Dict[str, Any]]:
     """
     Return top N anomalies sorted by anomaly score.
+    Ensures all values are JSON-serializable.
     """
     if score_col not in df.columns:
         return []
 
-    return (
+    anomalies = (
         df[df[flag_col]]
         .sort_values(score_col, ascending=False)
         .head(limit)
         .to_dict("records")
     )
+    
+    # Convert numpy types to native Python types
+    return [convert_to_json_serializable(record) for record in anomalies]
 
 
 def detect_anomalies_moving_average(
@@ -222,17 +247,24 @@ def detect_anomalies_core(
                 )
             }
 
-        return {
+        # ✅ Convert entire response to JSON-serializable format
+        response = {
             "table": table,
             "time_column": time_column,
             "value_column": value_column,
             "methods_applied": methods,
-            "total_records": len(df),
+            "total_records": int(len(df)),
             "results": results
         }
+        
+        return convert_to_json_serializable(response)
 
     except Exception as e:
-        return {"error": str(e)}
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 # ==========================
 # MCP Tool Definition
@@ -245,7 +277,7 @@ def detect_anomalies(
     value_column: Optional[str] = None,
     aggregation_level: Optional[str] = None,
     methods: List[str] = ["moving_average", "standard_deviation"],
-    # ✅ Explicitly define metadata fields as optional - they'll be ignored
+    # ✅ Accept but ignore metadata fields from n8n
     toolCallId: Optional[str] = None,
     id: Optional[str] = None,
     type: Optional[str] = None,
@@ -267,7 +299,7 @@ def detect_anomalies(
     accepted but ignored to maintain compatibility with various MCP clients.
     
     Returns:
-        Dictionary containing anomaly detection results
+        Dictionary containing anomaly detection results with all values JSON-serializable
     """
     # These metadata fields are intentionally ignored
     # Just call the core logic with the actual parameters
