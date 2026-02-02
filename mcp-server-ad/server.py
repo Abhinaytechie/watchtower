@@ -6,6 +6,9 @@ Compatible with:
 - n8n Agents
 - MCP tool calls
 - Voice (Vapi)
+
+IMPORTANT: FastMCP doesn't support **kwargs, so we explicitly define
+optional parameters that n8n might pass as metadata.
 """
 
 from fastmcp import FastMCP
@@ -47,29 +50,9 @@ engine = create_engine(
 try:
     with engine.connect() as conn:
         result = conn.execute(text("SELECT 1"))
-        print(result.scalar())
+        print("✅ Database connection successful")
 except Exception as e:
-    print(f"Failed to connect: {e}")
-
-# ==========================
-# Pydantic Input Model
-# ==========================
-class DetectAnomaliesInput(BaseModel):
-    """
-    Input schema for anomaly detection.
-    Ignores any extra fields like toolCallId, id, etc.
-    """
-    table: str = Field(..., description="Database table name (e.g., 'tempt')")
-    time_column: str = Field(..., description="Column containing date/time values")
-    value_column: Optional[str] = Field(None, description="Numeric column to analyze (auto-detected if not provided)")
-    aggregation_level: Optional[str] = Field(None, description="Aggregation level (e.g., 'daily', 'weekly')")
-    methods: List[str] = Field(
-        default=["moving_average", "standard_deviation"],
-        description="Detection methods to apply"
-    )
-
-    # ✅ Ignore n8n / MCP extra metadata safely
-    model_config = ConfigDict(extra="ignore")
+    print(f"❌ Failed to connect: {e}")
 
 # ==========================
 # Anomaly Detection Methods
@@ -258,7 +241,12 @@ def detect_anomalies(
     value_column: Optional[str] = None,
     aggregation_level: Optional[str] = None,
     methods: List[str] = ["moving_average", "standard_deviation"],
-    **kwargs  # ✅ Catch and ignore any extra parameters like toolCallId, id, etc.
+    # ✅ Explicitly define metadata fields as optional - they'll be ignored
+    toolCallId: Optional[str] = None,
+    id: Optional[str] = None,
+    type: Optional[str] = None,
+    tool: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Detect anomalies in a PostgreSQL table using statistical methods.
@@ -271,13 +259,14 @@ def detect_anomalies(
         aggregation_level: Aggregation level (e.g., 'daily', 'weekly')
         methods: Detection methods to apply (default: ["moving_average", "standard_deviation"])
     
+    Note: Additional metadata parameters (toolCallId, id, type, tool, metadata) are 
+    accepted but ignored to maintain compatibility with various MCP clients.
+    
     Returns:
         Dictionary containing anomaly detection results
     """
-    # Log ignored parameters for debugging
-    if kwargs:
-        print(f"⚠️ Ignoring extra parameters: {list(kwargs.keys())}")
-    
+    # These metadata fields are intentionally ignored
+    # Just call the core logic with the actual parameters
     return detect_anomalies_core(
         table=table,
         time_column=time_column,
