@@ -54,6 +54,7 @@ except Exception as e:
 # Pydantic Input Model
 # ==========================
 class DetectAnomaliesInput(BaseModel):
+    id: Optional[str]=None,
     table: str
     time_column: str
     value_column: Optional[str] = None
@@ -245,6 +246,7 @@ def detect_anomalies_core(
 
 @mcp.tool()
 def detect_anomalies(
+   
     table: str,
     time_column: str,
     value_column: Optional[str] = None,
@@ -256,6 +258,7 @@ def detect_anomalies(
     The table is expected to be prepared beforehand (e.g., 'tempt').
     """
     return detect_anomalies_core(
+        
         table=table,
         time_column=time_column,
         value_column=value_column,
